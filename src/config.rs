@@ -335,7 +335,15 @@ pub struct Hosting {
     pub boost: bool,
     /// Kyber's capture and encode engine.
     pub engine: Engine,
+    /// Highest frame rate to stream at, in frames per second; 0 is the
+    /// display's highest. Kyber captures at the display's refresh rate, so
+    /// this is applied by running the display at no more than this rate
+    /// while hosting.
+    pub max_fps: u32,
 }
+
+/// Frame-rate caps offered for hosting; 0 is the display's highest rate.
+pub const FRAME_RATES: &[u32] = &[60, 90, 120, 144, 0];
 
 impl Hosting {
     /// The encoder to test with: the chosen one, or software when the
@@ -361,6 +369,7 @@ impl Default for Hosting {
             agent_port: 8081,
             boost: true,
             engine: Engine::Default,
+            max_fps: 60,
         }
     }
 }

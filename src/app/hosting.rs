@@ -49,6 +49,8 @@ pub(super) struct HostingState {
     /// Resolutions the primary display offers, and what it runs at now.
     modes: Vec<Mode>,
     native: Option<Mode>,
+    /// Every mode the display offers, every refresh rate included.
+    all_modes: Vec<Mode>,
     /// The display was switched for hosting and must be put back.
     display_switched: bool,
     /// The server was ready on the previous frame (to celebrate once).
@@ -80,6 +82,7 @@ impl HostingState {
             failure: None,
             modes: Vec::new(),
             native: None,
+            all_modes: Vec::new(),
             display_switched: false,
             was_ready: false,
         }
@@ -92,6 +95,7 @@ pub(super) enum HRow {
     Password,
     ShowPassword,
     Resolution,
+    FrameRate,
     Encoder,
     FindEncoder,
     Port,
@@ -164,7 +168,8 @@ impl App {
         // was before.
         if !self.hosting.display_switched {
             self.hosting.native = display::current();
-            self.hosting.modes = display::pick_modes(&display::all_modes());
+            self.hosting.all_modes = display::all_modes();
+            self.hosting.modes = display::pick_modes(&self.hosting.all_modes);
         }
     }
 
@@ -281,13 +286,12 @@ impl App {
     }
 
     /// The display mode chosen for hosting, if it is not "leave as it is".
+    /// The display mode to host with: the chosen resolution (or the
+    /// current one) at no more than the chosen frame rate.
     fn hosting_mode(&self) -> Option<Mode> {
         let hosting = &self.config.hosting;
-        self.hosting
-            .modes
-            .iter()
-            .copied()
-            .find(|m| m.width == hosting.width && m.height == hosting.height)
+        let size = (hosting.width > 0).then_some((hosting.width, hosting.height));
+        display::hosting_mode(&self.hosting.all_modes, self.hosting.native, size, hosting.max_fps)
     }
 
     fn restore_display(&mut self) {
@@ -414,14 +418,26 @@ impl App {
     }
 
     fn resolution_label(&self) -> String {
+        let hosting = &self.config.hosting;
+        if hosting.width > 0 {
+            return format!("{} \u{d7} {}", hosting.width, hosting.height);
+        }
+        match self.hosting.native {
+            Some(native) => format!("Keep as it is ({} \u{d7} {})", native.width, native.height),
+            None => "Keep as it is".to_owned(),
+        }
+    }
+
+    fn frame_rate_label(&self) -> String {
+        let cap = self.config.hosting.max_fps;
+        let wanted = if cap == 0 {
+            "Display's highest".to_owned()
+        } else {
+            format!("{cap} fps max")
+        };
         match self.hosting_mode() {
-            Some(mode) => mode.label(),
-            None => match self.hosting.native {
-                Some(native) => {
-                    format!("Keep as it is ({} \u{d7} {})", native.width, native.height)
-                }
-                None => "Keep as it is".to_owned(),
-            },
+            Some(mode) => format!("{wanted} \u{b7} {} Hz", mode.hz),
+            None => wanted,
         }
     }
 
@@ -465,6 +481,9 @@ impl App {
             Row::new(HRow::Resolution, RowKind::Choice, "Resolution while hosting", self.resolution_label())
                 .note("Switches the screen while you share it")
                 .help("Kyber streams this PC's main display exactly as it is. The display switches when hosting starts and goes back when it stops; each entry uses the highest refresh rate the display offers."),
+            Row::new(HRow::FrameRate, RowKind::Choice, "Frame rate while hosting", self.frame_rate_label())
+                .note("60 leaves the GPU to your games")
+                .help("Kyber streams at the display's refresh rate, so Godrays runs the display at no more than this while hosting. 60 fps encodes far fewer frames and keeps the GPU free for games; higher rates show new frames sooner (every 7 ms at 144 Hz against 17 ms at 60) and feel smoother, if the GPU keeps up."),
             Row::new(HRow::Encoder, RowKind::Choice, "Video encoder", hosting.encoder.label())
                 .note("Your graphics card's encoder is fastest")
                 .help("Hardware encoders are far faster than software, but must work with your drivers. If players connect and see no picture, change this, or let the test below pick."),
@@ -533,6 +552,17 @@ impl App {
                 };
                 self.config.hosting.width = width;
                 self.config.hosting.height = height;
+                self.save();
+                self.note_restart_needed();
+            }
+            HRow::FrameRate => {
+                let rates = crate::config::FRAME_RATES;
+                let current = rates
+                    .iter()
+                    .position(|&r| r == self.config.hosting.max_fps)
+                    .unwrap_or(0) as i32;
+                let next = (current + delta).rem_euclid(rates.len() as i32);
+                self.config.hosting.max_fps = rates[next as usize];
                 self.save();
                 self.note_restart_needed();
             }

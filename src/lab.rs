@@ -478,8 +478,14 @@ impl DisplayGuard {
             return None;
         }
         display::set(mode).ok()?;
-        // Let the desktop settle before capturing it.
-        std::thread::sleep(Duration::from_millis(1500));
+        // Let the desktop settle before capturing it: a monitor can take a
+        // few seconds to resync, above all on a refresh-rate change, and a
+        // capture started meanwhile shows no picture.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while display::current() != Some(mode) && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        std::thread::sleep(Duration::from_millis(3000));
         Some(Self)
     }
 }

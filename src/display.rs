@@ -35,6 +35,35 @@ pub fn pick_modes(all: &[Mode]) -> Vec<Mode> {
     best
 }
 
+/// The mode to host with: the chosen size (or the current one), at the
+/// highest refresh rate not above `max_hz` (0: no cap). When every rate the
+/// display offers for that size is above the cap, its lowest one. None when
+/// there is nothing to choose from.
+pub fn hosting_mode(
+    all: &[Mode],
+    current: Option<Mode>,
+    size: Option<(u32, u32)>,
+    max_hz: u32,
+) -> Option<Mode> {
+    let (width, height) = size.or(current.map(|m| (m.width, m.height)))?;
+    let rates: Vec<u32> = all
+        .iter()
+        .filter(|m| m.width == width && m.height == height)
+        .map(|m| m.hz)
+        .collect();
+    let hz = if max_hz == 0 {
+        rates.iter().copied().max()?
+    } else {
+        rates
+            .iter()
+            .copied()
+            .filter(|&hz| hz <= max_hz)
+            .max()
+            .or_else(|| rates.iter().copied().min())?
+    };
+    Some(Mode { width, height, hz })
+}
+
 #[cfg(windows)]
 mod imp {
     use super::Mode;
@@ -145,6 +174,28 @@ mod tests {
 
     fn mode(width: u32, height: u32, hz: u32) -> Mode {
         Mode { width, height, hz }
+    }
+
+    #[test]
+    fn hosting_mode_caps_the_refresh_rate() {
+        let all = [
+            mode(1920, 1080, 60),
+            mode(1920, 1080, 120),
+            mode(1920, 1080, 165),
+            mode(1920, 1080, 59),
+            mode(2560, 1440, 144),
+        ];
+        let now = Some(mode(1920, 1080, 165));
+        assert_eq!(hosting_mode(&all, now, None, 60), Some(mode(1920, 1080, 60)));
+        assert_eq!(hosting_mode(&all, now, None, 144), Some(mode(1920, 1080, 120)));
+        assert_eq!(hosting_mode(&all, now, None, 0), Some(mode(1920, 1080, 165)));
+        // Only rates above the cap: the lowest one.
+        assert_eq!(
+            hosting_mode(&all, now, Some((2560, 1440)), 60),
+            Some(mode(2560, 1440, 144))
+        );
+        assert_eq!(hosting_mode(&all, None, None, 60), None);
+        assert_eq!(hosting_mode(&all, now, Some((800, 600)), 60), None);
     }
 
     #[test]

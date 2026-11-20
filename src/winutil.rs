@@ -62,6 +62,15 @@ mod imp {
         (!search.found.is_null()).then_some(search.found)
     }
 
+    /// Gives the keyboard back to a process's window (the stream, after the
+    /// toolbar was clicked).
+    pub fn focus_window_of(pid: u32) {
+        if let Some(hwnd) = visible_window_of(pid) {
+            // SAFETY: plain Win32 call on a window we just enumerated.
+            unsafe { SetForegroundWindow(hwnd) };
+        }
+    }
+
     /// Puts a lab client's window on the right half of the primary screen,
     /// on top, so the beacon at the top-left stays visible both in the
     /// original and inside the stream.
@@ -204,6 +213,8 @@ mod imp {
         false
     }
 
+    pub fn focus_window_of(_pid: u32) {}
+
     #[derive(Default)]
     pub struct QuitCombo;
 
@@ -214,4 +225,4 @@ mod imp {
     }
 }
 
-pub use imp::{place_lab_window, FullscreenRequest, QuitCombo};
+pub use imp::{focus_window_of, place_lab_window, FullscreenRequest, QuitCombo};

@@ -321,6 +321,8 @@ struct Shared {
 /// A running (or just finished) kyclient process.
 pub struct Session {
     shared: Arc<Shared>,
+    /// The client's process id, to bring its window back to the front.
+    pub pid: u32,
     pub command_line: String,
     pub started: Instant,
 }
@@ -406,6 +408,7 @@ impl Session {
             .spawn()
             .map_err(|e| format!("Could not start {}: {e}", binary.display()))?;
 
+        let pid = child.id();
         let shared = Arc::new(Shared {
             state: Mutex::new(SessionState::Running),
             log: LogBuffer::default(),
@@ -429,6 +432,7 @@ impl Session {
 
         Ok(Self {
             shared,
+            pid,
             command_line,
             started: Instant::now(),
         })

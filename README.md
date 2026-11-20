@@ -65,9 +65,17 @@ Any of these, at any time:
 
 - **Ctrl + Alt + Shift + Q** on the keyboard. Godrays watches raw keyboard input, so this works even while the stream has the keyboard captured.
 - **Start + Back + LB + RB**, held for one second on an XInput gamepad.
-- The **Leave** button in the top-right corner of the screen, which stays on top of the stream (can be turned off in *Settings > App*).
+- The **Leave** button of the toolbar in the top-right corner of the screen, which stays on top of the stream.
 
-Next to it, a strip shows Kyber's live latency: capture to display, and each stage (encode, network, decode, render), with the frame rate. **Ctrl + Alt + Shift + S** shows or hides it; *Settings > Latency* turns it off.
+### The toolbar over the stream
+
+- **Live stats:** Kyber's capture-to-display time and each stage (encode, network, decode, render), with the frame rate. The **×** at its end hides it, so it stays out of the way; **Stats** brings it back, and so does **Ctrl + Alt + Shift + S**. *Settings > Latency* turns it off for good.
+- **Tune:** change the codec, bitrate, video delivery, video buffer or full colour while you play, then *Apply*: the stream reconnects in about a second with the new settings, which are kept for next time. The panel shows the previous settings' numbers, so you can keep whatever measures best.
+- **Leave.**
+
+*Settings > App > Toolbar over the stream* hides Tune and Leave.
+
+![The toolbar with Tune open](docs/img/toolbar.png)
 
 If the host stops sharing, the stream ends by itself and you are told so, instead of being left on a frozen picture.
 
@@ -92,7 +100,8 @@ Under them, this PC's name and address, the encoder in use, the priority and the
 - **Stream ahead of games** (on by default) gives Kyber's capture and encode processes REALTIME GPU scheduling priority, falling back to HIGH if Windows refuses, plus high CPU priority. With the GPU at full load it made encoding 20% faster and cut the worst-case delay by 12 ms in our measurements; HIGH alone made no difference.
 - Before starting, Godrays checks that the hosting port is free for both TCP and UDP. A UDP clash used to let players connect and then wait for a picture that never came.
 - Kyber's second video engine can be chosen with `engine = "libavconv"` under `[hosting]` in the settings file. It measured equal when idle and much slower under GPU load, so it is not offered in the interface.
-- **Resolution while hosting.** Kyber streams the display exactly as it is, so a lower resolution means a lighter, faster stream. Godrays switches the main display when hosting starts, at the highest refresh rate the display offers for that size, and switches it back when hosting stops. The change is never saved: if Godrays quits unexpectedly, Windows returns to your own setting.
+- **Resolution and frame rate while hosting.** Kyber streams the display exactly as it is, at its refresh rate; it has no frame-rate setting of its own. So Godrays switches the main display when hosting starts, to the chosen resolution at the highest refresh rate not above the frame-rate cap (60 fps by default; 90, 120, 144 or the display's highest can be chosen), and switches it back when hosting stops. The change is never saved: if Godrays quits unexpectedly, Windows returns to your own setting.
+- **60 fps or more?** Measured on this PC (streaming to itself, so both ends ran at the chosen rate): idle, 165 Hz showed the picture in 24 ms against 50 ms at 60 Hz. With the GPU at full load, 60 fps halved the encode time (6 ms against 11 ms) and the delay on screen came out about the same (50 against 47 ms). 60 fps leaves the GPU to your games; a higher rate is quicker and smoother when the GPU has room.
 - The password is generated at random the first time and can be changed (at least 8 characters). It is kept in Windows Credential Manager; the server's configuration only holds its hash.
 - Godrays runs the server as an ordinary program with its own configuration (`%APPDATA%\godrays\config\host\kyber_config.toml`), so starting, stopping and changing the sign-in never need administrator rights. Kyber's token sign-in is switched off there, because Kyber's template enables it with a published development key.
 - For controllers, Kyber needs the [ViGEmBus driver](https://github.com/nefarius/ViGEmBus/releases) on the hosting PC. The Host screen shows whether it is installed.
@@ -157,6 +166,7 @@ The interface borrows its visual language from print: a near-black canvas, laven
 - **Cards** are flat and quiet, with white pixel-art icons. The selected card turns lavender, pops forward with a slight overshoot and gets a lime offset shadow.
 - **The icon** is a white pixel G on a black octagon, drawn on a 16 × 16 grid in code (`src/ui.rs`); `godrays --export-icon assets/godrays.ico` rewrites the multi-size icon that `build.rs` embeds in the .exe.
 - **The website** ([docs/index.html](docs/index.html), served by GitHub Pages) runs the same light-shaft shader in WebGL2. Its light follows the hovered button or card, as the launcher's follows the selection, and wanders when nothing moves.
+- **The launcher draws at most 60 frames a second** (it is a menu: the GPU belongs to games and the stream), except during a latency test, whose on-screen clock must change at every refresh.
 - **Fonts** come from Windows (Arial, Arial Black, Old English Text, Cascadia Mono); none are bundled. Anything missing falls back to egui's built-in fonts.
 - All motion stops while a stream runs or Godrays is in the background, so it costs nothing when it would only get in the way. Without OpenGL 3.1 the backdrop falls back to a still version.
 

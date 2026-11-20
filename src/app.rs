@@ -258,6 +258,14 @@ pub struct App {
     lab_results: Vec<crate::lab::LabResult>,
     /// Ctrl+Alt+Shift+S hides the statistics for the current session.
     stats_visible: bool,
+    /// The Tune panel over a running stream, while open.
+    tune: Option<latency::Tune>,
+    /// The last stream's numbers before Tune reconnected it.
+    tune_before: Option<String>,
+    /// Start this host's stream again as soon as the current one ends.
+    relaunch: Option<u64>,
+    /// When the last launcher frame started, to cap the frame rate.
+    last_frame: Option<Instant>,
     exit_after_lab: bool,
     discovery: Option<crate::discovery::Discovery>,
     pairing: pairing::PairingState,
@@ -368,6 +376,10 @@ impl App {
                 crate::lab::load_results()
             },
             stats_visible: true,
+            tune: None,
+            tune_before: None,
+            relaunch: None,
+            last_frame: None,
             exit_after_lab: args.exit_after_lab,
             discovery: (!args.demo).then(|| {
                 let repaint = cc.egui_ctx.clone();
@@ -688,6 +700,13 @@ impl App {
             });
         if let Some((code, by_user, reason, ran_for, log)) = finished {
             self.session = None;
+            if let Some(host_id) = self.relaunch.take() {
+                // Tune applied new settings: straight back into the stream.
+                self.launch(host_id, ctx);
+                if self.session.is_some() {
+                    return;
+                }
+            }
             self.monitor.set_paused(false);
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
             let lasted = format_duration(ran_for);
@@ -1111,7 +1130,7 @@ impl App {
                 toggle(SRow::LauncherFullscreen, "Launcher fullscreen", c.launcher_fullscreen)
                     .help("Also toggled with F11 or the Start button."),
                 toggle(SRow::AutoConnect, "Connect to the last host at startup", c.auto_connect_last),
-                toggle(SRow::QuitButton, "Leave button over the stream", !c.hide_quit_button)
+                toggle(SRow::QuitButton, "Toolbar over the stream", !c.hide_quit_button)
                     .help("A small always-on-top button in the top-right corner of the screen while you are streaming: one click ends the stream. Ctrl+Alt+Shift+Q and holding Start + Back + LB + RB work as well."),
                 choice(SRow::LogLevel, "Client log level", s.log_level.label())
                     .help("How much kyclient writes to its log. Raise it when diagnosing a failed connection."),
@@ -2253,6 +2272,19 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // The launcher is a menu: never more than 60 frames a second, so the
+        // GPU stays with games and the stream. Not during a lab run, whose
+        // on-screen clock must change at every display refresh.
+        if self.lab.is_none() {
+            if let Some(last) = self.last_frame {
+                // Wake a little early: vsync then waits for the next refresh.
+                let target = Duration::from_micros(16_667 - 2_000);
+                if let Some(rest) = target.checked_sub(last.elapsed()) {
+                    std::thread::sleep(rest);
+                }
+            }
+        }
+        self.last_frame = Some(Instant::now());
         self.poll_background(ctx);
         if crate::hotkey::stats_pressed() {
             self.stats_visible = !self.stats_visible;
@@ -2337,7 +2369,10 @@ impl eframe::App for App {
         // Gamepad input does not wake egui, so poll: fast while the launcher
         // is in use, slowly while a stream is running or we are in the
         // background, to stay out of the stream's way.
-        let delay = if streaming {
+        let delay = if streaming && self.tune.is_some() {
+            // The Tune panel reacts to the mouse.
+            50
+        } else if streaming {
             500
         } else if !focused {
             400
@@ -2515,7 +2550,7 @@ fn srow_note(row: SRow) -> &'static str {
         SRow::StartFullscreen => "Presses Ctrl+Alt+F for you",
         SRow::LauncherFullscreen => "Also F11 or Start",
         SRow::AutoConnect => "Straight into your last host",
-        SRow::QuitButton => "One click to leave a stream",
+        SRow::QuitButton => "Tune and Leave, top-right",
         SRow::LogLevel => "Raise it to diagnose a failed connection",
         SRow::ClientPath => "Found automatically when left empty",
         SRow::GetKyber => "Official installer, client and host",

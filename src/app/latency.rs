@@ -6,6 +6,7 @@ use eframe::egui::{self, vec2, Align2, Color32, Pos2, Rect, RichText, Sense, Str
 
 use super::{App, SRow};
 use crate::beacon;
+use crate::config::{step_in, StreamSettings, BITRATES, VIDEO_BUFFERS};
 use crate::lab::{self, Lab, LabResult, Plan, Stage};
 use crate::pad::Nav;
 use crate::ui::{self, Row, RowAct, RowKind};
@@ -68,14 +69,17 @@ impl App {
     }
 
     /// The display mode hosting would use, so the lab measures the same.
+    /// The lab streams like hosting does: same resolution, same frame-rate
+    /// cap. None when the display can stay as it is.
     fn lab_display_mode(&self) -> Option<crate::display::Mode> {
-        let (w, h) = (self.config.hosting.width, self.config.hosting.height);
-        if w == 0 || self.hosting.is_demo() {
+        if self.hosting.is_demo() {
             return None;
         }
-        crate::display::pick_modes(&crate::display::all_modes())
-            .into_iter()
-            .find(|m| m.width == w && m.height == h)
+        let hosting = &self.config.hosting;
+        let current = crate::display::current();
+        let size = (hosting.width > 0).then_some((hosting.width, hosting.height));
+        crate::display::hosting_mode(&crate::display::all_modes(), current, size, hosting.max_fps)
+            .filter(|mode| Some(*mode) != current)
     }
 
     pub(super) fn poll_lab(&mut self, ctx: &egui::Context) {
@@ -329,19 +333,30 @@ impl App {
     }
 
     /// Over the stream, top-right: the live statistics and the Leave button.
+    /// The toolbar over a running stream, top-right of the screen: the live
+    /// latency strip (closable), Tune (stream settings, applied with a quick
+    /// reconnect) and Leave.
     pub(super) fn stream_overlay(&mut self, ctx: &egui::Context) {
         let Some(session) = &self.session else {
+            self.tune = None;
             return;
         };
-        let show_stats = !self.config.hide_stats && self.stats_visible;
-        let show_leave = !self.config.hide_quit_button;
-        if !show_stats && !show_leave {
+        let pid = session.pid;
+        let stats_allowed = !self.config.hide_stats;
+        let show_stats = stats_allowed && self.stats_visible;
+        let show_buttons = !self.config.hide_quit_button;
+        if !show_stats && !show_buttons {
             return;
         }
         let stats = session.stats();
-        let stats_w = if show_stats { 470.0 } else { 0.0 };
-        let leave_w = if show_leave { 124.0 } else { 0.0 };
-        let size = vec2(stats_w + leave_w, 38.0);
+        let stats_w: f32 = if show_stats { 500.0 } else { 0.0 };
+        let reopen_w = if !show_stats && stats_allowed && show_buttons { 78.0 } else { 0.0 };
+        let (tune_w, leave_w) = if show_buttons { (92.0, 124.0) } else { (0.0, 0.0) };
+        let bar_w = stats_w + reopen_w + tune_w + leave_w;
+        let tune_open = self.tune.is_some() && show_buttons;
+        let panel_h = if tune_open { 318.0 } else { 0.0 };
+        let width: f32 = if tune_open { bar_w.max(470.0) } else { bar_w };
+        let size = vec2(width, BAR_H + panel_h);
         let monitor = ctx
             .input(|input| input.viewport().monitor_size)
             .unwrap_or(vec2(1920.0, 1080.0));
@@ -351,11 +366,15 @@ impl App {
             .with_resizable(false)
             .with_taskbar(false)
             .with_always_on_top()
+            .with_transparent(true)
             // Appearing must not take the keyboard away from the stream.
             .with_active(false)
             .with_inner_size(size)
             .with_position(egui::pos2(monitor.x - size.x - 16.0, 14.0));
-        let mut leave = false;
+        let mut clicked: Option<Bar> = None;
+        let mut tune_action: Option<TuneAction> = None;
+        let draft = self.tune.as_ref().map(|t| t.draft.clone());
+        let before = self.tune_before.clone();
         ctx.show_viewport_immediate(
             egui::ViewportId::from_hash_of("leave-stream"),
             builder,
@@ -364,28 +383,317 @@ impl App {
                     .frame(egui::Frame::new())
                     .show(ctx, |ui| {
                         let all = ui.max_rect();
+                        let mut x = all.right() - bar_w;
+                        let mut slot = |w: f32| {
+                            let rect = Rect::from_min_size(Pos2::new(x, all.top()), vec2(w, BAR_H));
+                            x += w;
+                            rect
+                        };
                         if show_stats {
-                            let rect = Rect::from_min_size(all.min, vec2(stats_w, all.height()));
+                            let rect = slot(stats_w);
                             paint_stats(ui.painter(), rect, &stats);
-                        }
-                        if show_leave {
-                            let rect = Rect::from_min_max(
-                                Pos2::new(all.right() - leave_w, all.top()),
-                                all.max,
+                            let close = Rect::from_min_max(
+                                Pos2::new(rect.right() - 30.0, rect.top()),
+                                rect.max,
                             );
+                            let response = ui.interact(close, ui.id().with("hide-stats"), Sense::click());
+                            paint_close(ui.painter(), close, response.hovered());
+                            if response.on_hover_text("Hide the stats (Ctrl+Alt+Shift+S)").clicked() {
+                                clicked = Some(Bar::HideStats);
+                            }
+                        }
+                        if reopen_w > 0.0 {
+                            let rect = slot(reopen_w);
+                            let response = ui.interact(rect, ui.id().with("show-stats"), Sense::click());
+                            paint_button(ui.painter(), rect, "STATS", response.hovered(), false);
+                            if response.clicked() {
+                                clicked = Some(Bar::ShowStats);
+                            }
+                        }
+                        if show_buttons {
+                            let rect = slot(tune_w);
+                            let response = ui.interact(rect, ui.id().with("tune"), Sense::click());
+                            paint_button(ui.painter(), rect, "TUNE", response.hovered(), tune_open);
+                            if response.clicked() {
+                                clicked = Some(Bar::Tune);
+                            }
+                            let rect = slot(leave_w);
                             let response = ui.interact(rect, ui.id().with("leave"), Sense::click());
                             paint_leave(ui.painter(), rect, response.hovered());
-                            leave = response.clicked();
+                            if response.clicked() {
+                                clicked = Some(Bar::Leave);
+                            }
+                        }
+                        if let (true, Some(draft)) = (tune_open, &draft) {
+                            let panel = Rect::from_min_max(
+                                Pos2::new(all.right() - width, all.top() + BAR_H + 6.0),
+                                all.max,
+                            );
+                            tune_action = tune_panel(ui, panel, draft, before.as_deref());
                         }
                     });
             },
         );
-        if leave {
-            if let Some(session) = &self.session {
-                session.stop();
+
+        match clicked {
+            Some(Bar::HideStats) => {
+                self.stats_visible = false;
+                crate::winutil::focus_window_of(pid);
             }
+            Some(Bar::ShowStats) => {
+                self.stats_visible = true;
+                crate::winutil::focus_window_of(pid);
+            }
+            Some(Bar::Tune) if self.tune.is_some() => {
+                self.tune = None;
+                crate::winutil::focus_window_of(pid);
+            }
+            Some(Bar::Tune) => {
+                self.tune = Some(Tune {
+                    draft: self.config.stream.clone(),
+                })
+            }
+            Some(Bar::Leave) => {
+                self.tune = None;
+                if let Some(session) = &self.session {
+                    session.stop();
+                }
+            }
+            None => {}
+        }
+        match tune_action {
+            Some(TuneAction::Change(row, delta)) => {
+                if let Some(tune) = &mut self.tune {
+                    change(&mut tune.draft, row, delta);
+                }
+            }
+            Some(TuneAction::Cancel) => {
+                self.tune = None;
+                crate::winutil::focus_window_of(pid);
+            }
+            Some(TuneAction::Apply) => self.apply_tune(),
+            None => {}
         }
     }
+
+    /// Saves the tuned settings and reconnects with them.
+    fn apply_tune(&mut self) {
+        let Some(tune) = self.tune.take() else {
+            return;
+        };
+        let (Some(stats), Some(host_id)) = (
+            self.session.as_ref().map(|s| s.stats()),
+            self.stream.as_ref().map(|v| v.host_id),
+        ) else {
+            return;
+        };
+        if stats.frames > 0 {
+            self.tune_before = Some(format!(
+                "{:.1} ms \u{b7} {:.0} fps with {}",
+                stats.total,
+                stats.fps,
+                describe(&self.config.stream)
+            ));
+        }
+        if tune.draft.codec != self.config.stream.codec {
+            // An explicit choice beats the host's measured pick.
+            self.config.stream.use_host_codec = false;
+        }
+        let use_host_codec = self.config.stream.use_host_codec;
+        self.config.stream = tune.draft;
+        self.config.stream.use_host_codec = use_host_codec;
+        self.save();
+        self.relaunch = Some(host_id);
+        if let Some(session) = &self.session {
+            session.stop();
+        }
+    }
+}
+
+const BAR_H: f32 = 38.0;
+
+#[derive(Clone, Copy)]
+enum Bar {
+    HideStats,
+    ShowStats,
+    Tune,
+    Leave,
+}
+
+/// Stream settings being tuned over a running stream.
+pub(super) struct Tune {
+    draft: StreamSettings,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TuneRow {
+    Codec,
+    Bitrate,
+    Delivery,
+    Buffer,
+    FullColour,
+}
+
+enum TuneAction {
+    Change(TuneRow, i32),
+    Apply,
+    Cancel,
+}
+
+fn bitrate_label(mbps: u32) -> String {
+    if mbps == 0 {
+        "Auto".to_owned()
+    } else {
+        format!("{mbps} Mbit/s")
+    }
+}
+
+fn buffer_label(ms: u32) -> String {
+    if ms == 0 {
+        "None".to_owned()
+    } else {
+        format!("{ms} ms")
+    }
+}
+
+fn describe(s: &StreamSettings) -> String {
+    format!(
+        "{} \u{b7} {} \u{b7} {}",
+        s.codec.label(),
+        bitrate_label(s.bitrate_mbps),
+        s.video_transport.label()
+    )
+}
+
+fn change(s: &mut StreamSettings, row: TuneRow, delta: i32) {
+    match row {
+        TuneRow::Codec => s.codec = s.codec.step(delta),
+        TuneRow::Bitrate => s.bitrate_mbps = step_in(BITRATES, s.bitrate_mbps, delta),
+        TuneRow::Delivery => s.video_transport = s.video_transport.step(delta),
+        TuneRow::Buffer => s.video_buffer_ms = step_in(VIDEO_BUFFERS, s.video_buffer_ms, delta),
+        TuneRow::FullColour => s.yuv444 = !s.yuv444,
+    }
+}
+
+/// The Tune panel under the toolbar.
+fn tune_panel(
+    ui: &mut egui::Ui,
+    panel: Rect,
+    draft: &StreamSettings,
+    before: Option<&str>,
+) -> Option<TuneAction> {
+    let painter = ui.painter().clone();
+    painter.rect_filled(panel, 6.0, ui::PANEL);
+    painter.rect_stroke(panel, 6.0, Stroke::new(1.0, ui::LINE), egui::StrokeKind::Inside);
+    let inner = panel.shrink2(vec2(16.0, 12.0));
+    painter.text(
+        inner.left_top(),
+        Align2::LEFT_TOP,
+        "TUNE THE STREAM",
+        ui::mono(11.5),
+        ui::LIME,
+    );
+    painter.text(
+        inner.right_top(),
+        Align2::RIGHT_TOP,
+        "Apply reconnects in a second",
+        ui::font(12.5),
+        ui::DIM,
+    );
+    let rows = [
+        (TuneRow::Codec, "Codec", draft.codec.label().to_owned()),
+        (TuneRow::Bitrate, "Bitrate", bitrate_label(draft.bitrate_mbps)),
+        (TuneRow::Delivery, "Video delivery", draft.video_transport.label().to_owned()),
+        (TuneRow::Buffer, "Video buffer", buffer_label(draft.video_buffer_ms)),
+        (
+            TuneRow::FullColour,
+            "Full colour (4:4:4)",
+            if draft.yuv444 { "On" } else { "Off" }.to_owned(),
+        ),
+    ];
+    let mut action = None;
+    let mut y = inner.top() + 26.0;
+    for (row, label, value) in rows {
+        let line = Rect::from_min_size(Pos2::new(inner.left(), y), vec2(inner.width(), 36.0));
+        painter.text(line.left_center(), Align2::LEFT_CENTER, label, ui::font(15.0), ui::TEXT);
+        let right = Rect::from_min_max(Pos2::new(line.right() - 30.0, line.top() + 3.0), line.max - vec2(0.0, 3.0));
+        let left = Rect::from_min_size(Pos2::new(line.right() - 230.0, line.top() + 3.0), vec2(30.0, 30.0));
+        for (rect, delta, glyph) in [(left, -1, "\u{25c0}"), (right, 1, "\u{25b6}")] {
+            let response = ui.interact(rect, ui.id().with(("tune", label, delta)), Sense::click());
+            let hot = response.hovered();
+            painter.rect_filled(rect, 4.0, if hot { ui::LAVENDER } else { ui::PANEL_HI });
+            painter.text(
+                rect.center(),
+                Align2::CENTER_CENTER,
+                glyph,
+                ui::font(11.0),
+                if hot { ui::INK } else { ui::TEXT },
+            );
+            if response.clicked() {
+                action = Some(TuneAction::Change(row, delta));
+            }
+        }
+        painter.text(
+            Pos2::new((left.right() + right.left()) / 2.0, line.center().y),
+            Align2::CENTER_CENTER,
+            value,
+            ui::bold(14.5),
+            ui::TEXT,
+        );
+        painter.line_segment(
+            [line.left_bottom(), line.right_bottom()],
+            Stroke::new(1.0, ui::LINE.gamma_multiply(0.6)),
+        );
+        y += 38.0;
+    }
+    if let Some(before) = before {
+        painter.text(
+            Pos2::new(inner.left(), y + 10.0),
+            Align2::LEFT_CENTER,
+            format!("Before: {before}"),
+            ui::font(12.5),
+            ui::DIM,
+        );
+    }
+    let buttons_top = inner.bottom() - 40.0;
+    let apply = Rect::from_min_size(Pos2::new(inner.left(), buttons_top), vec2(inner.width() * 0.62, 40.0));
+    let cancel = Rect::from_min_max(Pos2::new(apply.right() + 10.0, buttons_top), inner.right_bottom());
+    let response = ui.interact(apply, ui.id().with("tune-apply"), Sense::click());
+    let fill = if response.hovered() { ui::mix(ui::LIME, ui::TEXT, 0.25) } else { ui::LIME };
+    painter.rect_filled(apply, 5.0, fill);
+    painter.text(apply.center(), Align2::CENTER_CENTER, "APPLY \u{b7} RECONNECT", ui::bold(15.0), ui::INK);
+    if response.clicked() {
+        action = Some(TuneAction::Apply);
+    }
+    let response = ui.interact(cancel, ui.id().with("tune-cancel"), Sense::click());
+    paint_button(&painter, cancel, "CANCEL", response.hovered(), false);
+    if response.clicked() {
+        action = Some(TuneAction::Cancel);
+    }
+    action
+}
+
+fn paint_close(painter: &egui::Painter, rect: Rect, hot: bool) {
+    if hot {
+        painter.rect_filled(rect, 0.0, ui::PANEL_HI);
+    }
+    let c = rect.center();
+    let stroke = Stroke::new(2.0, if hot { ui::TEXT } else { ui::DIM });
+    painter.line_segment([c - vec2(5.0, 5.0), c + vec2(5.0, 5.0)], stroke);
+    painter.line_segment([c + vec2(-5.0, 5.0), c + vec2(5.0, -5.0)], stroke);
+}
+
+fn paint_button(painter: &egui::Painter, rect: Rect, text: &str, hot: bool, on: bool) {
+    let (fill, ink) = if on {
+        (ui::LAVENDER, ui::INK)
+    } else if hot {
+        (ui::PANEL_HI, ui::TEXT)
+    } else {
+        (ui::PANEL, ui::TEXT)
+    };
+    painter.rect_filled(rect, 0.0, fill);
+    painter.rect_stroke(rect, 0.0, Stroke::new(1.0, ui::LINE), egui::StrokeKind::Inside);
+    painter.text(rect.center(), Align2::CENTER_CENTER, text, ui::mono(12.5), ink);
 }
 
 fn paint_stats(painter: &egui::Painter, rect: Rect, stats: &crate::metrics::Summary) {

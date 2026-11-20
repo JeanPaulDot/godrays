@@ -66,6 +66,17 @@ Host under full GPU load (a game stand-in holding the GPU at 98–100%, `example
 | No priority change, or HIGH GPU priority | 34–37 ms | 41–44 ms | 52–60 ms | 84–95 fps | 62–65 ms, 79–90 ms |
 | **REALTIME GPU priority** (now the default) | **28–30 ms** | **37–38 ms** | **46–48 ms** | **102–106 fps** | 61–62 ms, 71–77 ms |
 
+Frame-rate cap (display at 60 Hz instead of 165 Hz while hosting; loopback on the same PC, so the client's display also ran at 60 Hz, which inflates the on-screen numbers at 60):
+
+| | Encode | Pipeline median | On screen median |
+|---|---|---|---|
+| Idle, 165 Hz | 4.6–4.7 ms | 8.1–8.2 ms | 24–25 ms |
+| Idle, 60 Hz | 5.9 ms | 9.0–9.6 ms | 50 ms |
+| Full GPU load, 165 Hz (96–97 fps) | 10.9–11.3 ms | 17.3–18.8 ms | 47–48 ms |
+| Full GPU load, 60 Hz (59 fps) | 5.7–6.0 ms | 17.7–17.8 ms | 50–52 ms |
+
+60 fps halves the encoder's work under load but does not lower what you see; on an idle host the higher refresh rate wins clearly. 60 is the default to keep the GPU free for games; a two-PC measurement is needed to see the cap's real cost when only the host runs at 60 Hz.
+
 A loaded GPU is the dominant host-side cost: encode goes from under 4 ms to about 30 ms, because Kyber's colour conversion queues behind the game's work. REALTIME scheduling priority recovers a fifth of it; the rest is the next target (see Phase 2).
 
 Not measured yet: Moonlight + Sunshine and Parsec on the same hardware (the "Measure another streaming app" tool exists; it needs Moonlight paired with Sunshine on this PC), NVENC and Quick Sync hosts, and a two-PC run over a real network.
