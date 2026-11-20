@@ -8,7 +8,7 @@
 <link rel="icon" href="img/icon.png">
 <meta property="og:title" content="Godrays">
 <meta property="og:description" content="Game streaming built on Kyber. One app to host or join, a 6-digit code to pair, real latency measured.">
-<meta property="og:image" content="img/home.png">
+<meta property="og:image" content="img/icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800;900&family=JetBrains+Mono:wght@500;700&family=UnifrakturCook:wght@700&display=swap" rel="stylesheet">
@@ -119,15 +119,87 @@
     opacity: 0.45;
   }
 
-  .shot {
-    display: block;
-    width: 100%;
-    border-radius: 10px;
+  /* ---------------------------------------- the app's widgets, in HTML */
+  .panel {
+    background: rgba(16, 12, 24, 0.94);
     border: 1px solid var(--line);
-    box-shadow: 0 40px 120px rgba(123, 69, 245, 0.25);
-    background: var(--void);
+    border-radius: 10px;
+    padding: 28px;
   }
-  .hero .shot { margin-top: 60px; }
+  .panel p { color: var(--text); margin: 14px 0 4px; }
+  .code { display: flex; gap: 10px; margin-top: 16px; }
+  .code b { width: 10px; }
+  .code i {
+    width: 58px;
+    height: 76px;
+    display: grid;
+    place-items: center;
+    font-style: normal;
+    font-family: var(--black);
+    font-weight: 900;
+    font-size: 40px;
+    border: 1.5px solid var(--lavender);
+    border-radius: 8px;
+    background: var(--panel-hi);
+  }
+  .code i:empty { border-color: var(--line); background: var(--void); }
+  .code i.next { border: 2.5px solid var(--lime); position: relative; }
+  .code i.next::after {
+    content: "";
+    position: absolute;
+    bottom: 14px;
+    width: 24px;
+    height: 4px;
+    background: var(--lime);
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 60% { opacity: 0; } }
+  .code.shake { animation: shake 0.45s; }
+  @keyframes shake { 20%, 60% { transform: translateX(-10px); } 40%, 80% { transform: translateX(10px); } }
+  .action {
+    margin-top: 20px;
+    padding: 16px 22px;
+    border-radius: 6px;
+    background: var(--lime);
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    transition: transform 0.18s cubic-bezier(.3,1.6,.5,1), box-shadow 0.18s;
+  }
+  .action b { font-family: var(--black); font-weight: 800; font-size: 18px; text-transform: uppercase; }
+  .action span { font-size: 14px; opacity: 0.7; }
+  .action:hover, .action:focus-visible { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--purple); outline: none; }
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 22px; max-width: 330px; }
+  .pad span {
+    height: 54px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--void);
+    font-family: var(--black);
+    font-weight: 800;
+    font-size: 22px;
+    transition: background 0.12s, color 0.12s;
+  }
+  .pad span.s { font-family: var(--mono); font-size: 14px; background: var(--panel); }
+  .pad span.on { background: var(--lavender); color: var(--ink); }
+  .sections { display: grid; gap: 6px; }
+  .sections div {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    padding: 10px 14px;
+    border-radius: 6px;
+    background: rgba(16, 12, 24, 0.85);
+    cursor: default;
+    transition: background 0.18s, color 0.18s;
+  }
+  .sections em { grid-row: span 2; font-style: normal; font-family: var(--mono); font-size: 11px; letter-spacing: 0.15em; color: var(--dim); padding-top: 5px; }
+  .sections b { font-size: 17px; }
+  .sections span { font-size: 13.5px; color: var(--dim); }
+  .sections div.on, .sections div:hover, .sections div:focus-visible { background: var(--lavender); color: var(--ink); outline: none; }
+  .sections div.on em, .sections div.on span, .sections div:hover em, .sections div:hover span { color: rgba(11, 6, 20, 0.7); }
 
   /* --------------------------------------------------------- numbers */
   .numbers {
@@ -253,7 +325,6 @@
       <a class="btn plain" href="https://github.com/JeanPaulDot/godrays"><b>Source on GitHub</b><span>Rust &middot; MIT licence</span></a>
     </div>
     <div class="caps">Windows 10 / 11 &middot; one 9 MB .exe &middot; no account</div>
-    <img class="shot" src="img/home.png" alt="Godrays home screen: Join and Host" width="1240" height="780">
 
     <div class="numbers">
       <div class="fact"><div class="caps">Pipeline</div><strong>7 ms</strong><p>capture to display, AMF + H.264, idle host</p></div>
@@ -276,7 +347,13 @@
           <li><b>Fastest encoder, measured.</b> Each encoder and codec your graphics card offers is tried on this PC; the fastest one that shows a picture wins.</li>
         </ul>
       </div>
-      <img class="shot" src="img/pairing.png" alt="The Host screen showing a 6-digit invite code" loading="lazy" width="1240" height="780">
+      <div class="panel" aria-label="Invite a device">
+        <div class="caps">02 &middot; Invite a device</div>
+        <div class="code" id="invite"><i>0</i><i>8</i><i>6</i><b></b><i>8</i><i>0</i><i>6</i></div>
+        <p>On the other PC: Join, pick this PC, type this code.</p>
+        <div class="caps lime" id="expires">Expires in 1:59 &middot; works once</div>
+        <div class="action primary" tabindex="0"><b>Start hosting</b><span>Share this screen, sound and controls</span></div>
+      </div>
     </div>
   </section>
 
@@ -292,7 +369,14 @@
           <li><b>Leave any time.</b> Hold Start + Back + LB + RB, press Ctrl + Alt + Shift + Q, or click Leave.</li>
         </ul>
       </div>
-      <img class="shot" src="img/paircode.png" alt="Typing a pairing code with the on-screen number pad" loading="lazy" width="1240" height="780">
+      <div class="panel" aria-label="Type the code">
+        <div class="caps lime">Pair with living-room-pc</div>
+        <div class="code typing" id="typed"><i></i><i></i><i></i><b></b><i></i><i></i><i></i></div>
+        <div class="pad" id="pad">
+          <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span>
+          <span>7</span><span>8</span><span>9</span><span class="s">DEL</span><span>0</span><span class="s">OK</span>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -318,7 +402,14 @@
         <h2>Clear <em class="g">choices</em>.</h2>
         <p>Six sections: Picture, Network, Controls, Hosting, Latency and App. Every setting says in one line what it does, and the full story sits under the list.</p>
       </div>
-      <img class="shot" src="img/settings.png" alt="Settings with sections on the left" loading="lazy" width="1240" height="780">
+      <div class="sections">
+        <div tabindex="0"><em>01</em><b>Picture</b><span>Codec, bitrate, sound</span></div>
+        <div tabindex="0"><em>02</em><b>Network</b><span>Transport and recovery</span></div>
+        <div tabindex="0"><em>03</em><b>Controls</b><span>Keyboard, mouse, gamepads</span></div>
+        <div tabindex="0" class="on"><em>04</em><b>Hosting</b><span>When others join this PC</span></div>
+        <div tabindex="0"><em>05</em><b>Latency</b><span>Measure, compare, overlay</span></div>
+        <div tabindex="0"><em>06</em><b>App</b><span>Godrays itself</span></div>
+      </div>
     </div>
   </section>
 
@@ -460,9 +551,27 @@ void main() {
   ["u_c0", "u_c1", "u_c2", "u_c3"].forEach((name, i) =>
     gl.uniform3f(at(name), ...palette[i].map((c) => c / 255)));
 
-  const still = matchMedia("(prefers-reduced-motion: reduce)");
-  let pointerX = 0.5;
-  addEventListener("pointermove", (e) => { pointerX = e.clientX / innerWidth; }, { passive: true });
+  // As in the launcher, the light leans towards whatever is selected: here
+  // the hovered or focused button, card or key, else the pointer. With
+  // nothing to follow (a phone, an idle mouse) it wanders slowly.
+  const selectable = ".btn, .card, .fact, .step, .action, .sections div, .pad span, .code, nav a";
+  let pointerX = null;
+  let pointerAt = -1e9;
+  let focusX = null;
+  const centre = (el) => {
+    const r = el.getBoundingClientRect();
+    return (r.left + r.width / 2) / innerWidth;
+  };
+  addEventListener("pointermove", (e) => {
+    pointerX = e.clientX / innerWidth;
+    pointerAt = performance.now();
+    const el = e.target.closest && e.target.closest(selectable);
+    focusX = el ? centre(el) : null;
+  }, { passive: true });
+  addEventListener("focusin", (e) => {
+    const el = e.target.closest && e.target.closest(selectable);
+    if (el) { focusX = centre(el); pointerAt = performance.now(); }
+  });
 
   const resize = () => {
     const dpr = Math.min(devicePixelRatio || 1, 2);
@@ -485,20 +594,74 @@ void main() {
   function frame(now) {
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
-    const target = 0.5 + (pointerX - 0.5) * 0.75;
-    const k = still.matches ? 1 : 1 - Math.exp(-dt * 2.5);
-    light[0] += (target - light[0]) * k;
+    const seconds = (now - start) / 1000;
+    const idle = now - pointerAt > 4000;
+    const x = idle || pointerX === null
+      ? 0.5 + 0.38 * Math.sin(seconds * 0.23) * Math.cos(seconds * 0.071)
+      : (focusX ?? pointerX);
+    const target = 0.5 + (x - 0.5) * 0.75;
+    light[0] += (target - light[0]) * (1 - Math.exp(-dt * 2.5));
     // Full light at the top of the page, dimmer where there is text to read.
     const wanted = 0.9 - 0.4 * Math.min(scrollY / innerHeight, 1);
-    strength += (wanted - strength) * (still.matches ? 1 : 1 - Math.exp(-dt * 4));
+    strength += (wanted - strength) * (1 - Math.exp(-dt * 4));
     gl.uniform4f(u.rect, 0, 0, canvas.width, canvas.height);
-    gl.uniform1f(u.time, still.matches ? 0 : (now - start) / 1000);
+    gl.uniform1f(u.time, seconds);
     gl.uniform2f(u.light, light[0], light[1]);
     gl.uniform1f(u.strength, strength);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     if (visible) requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+})();
+
+// The invite code counts down; the code entry types itself on the keypad,
+// fails once with a shake, then succeeds, like in the app.
+(() => {
+  const expires = document.getElementById("expires");
+  let left = 119;
+  setInterval(() => {
+    left = left > 0 ? left - 1 : 119;
+    expires.innerHTML = `Expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")} &middot; works once`;
+  }, 1000);
+
+  const boxes = [...document.querySelectorAll("#typed i")];
+  const row = document.getElementById("typed");
+  const keys = [...document.querySelectorAll("#pad span")];
+  const tries = ["086816", "086806"];
+  let attempt = 0;
+  let digits = "";
+  const show = () => boxes.forEach((box, i) => {
+    box.textContent = digits[i] ?? "";
+    box.classList.toggle("next", i === digits.length);
+  });
+  const press = (label) => {
+    keys.forEach((k) => k.classList.toggle("on", k.textContent === label));
+  };
+  const step = () => {
+    const code = tries[attempt % 2];
+    if (digits.length < 6) {
+      const d = code[digits.length];
+      press(d);
+      digits += d;
+      show();
+      setTimeout(step, 420);
+    } else if (attempt % 2 === 0) {
+      press("OK");
+      row.classList.remove("shake");
+      void row.offsetWidth;
+      row.classList.add("shake");
+      setTimeout(() => { digits = ""; attempt++; show(); setTimeout(step, 900); }, 600);
+    } else {
+      press("OK");
+      boxes.forEach((b) => { b.style.borderColor = "var(--lime)"; });
+      setTimeout(() => {
+        boxes.forEach((b) => { b.style.borderColor = ""; });
+        digits = ""; attempt++; show(); press(""); setTimeout(step, 1200);
+      }, 1800);
+    }
+  };
+  show();
+  setTimeout(step, 800);
 })();
 </script>
 </body>

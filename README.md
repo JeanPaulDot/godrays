@@ -156,7 +156,7 @@ The interface borrows its visual language from print: a near-black canvas, laven
 - **The backdrop** is a fragment shader (`src/fx.rs`): volumetric light shafts falling from above the window, sampled on a coarse grid and reduced to four colours with an ordered Bayer dither, each cell drawn as a dot. The light leans towards whatever is selected.
 - **Cards** are flat and quiet, with white pixel-art icons. The selected card turns lavender, pops forward with a slight overshoot and gets a lime offset shadow.
 - **The icon** is a white pixel G on a black octagon, drawn on a 16 × 16 grid in code (`src/ui.rs`); `godrays --export-icon assets/godrays.ico` rewrites the multi-size icon that `build.rs` embeds in the .exe.
-- **The website** ([docs/index.html](docs/index.html), served by GitHub Pages) runs the same light-shaft shader in WebGL2.
+- **The website** ([docs/index.html](docs/index.html), served by GitHub Pages) runs the same light-shaft shader in WebGL2. Its light follows the hovered button or card, as the launcher's follows the selection, and wanders when nothing moves.
 - **Fonts** come from Windows (Arial, Arial Black, Old English Text, Cascadia Mono); none are bundled. Anything missing falls back to egui's built-in fonts.
 - All motion stops while a stream runs or Godrays is in the background, so it costs nothing when it would only get in the way. Without OpenGL 3.1 the backdrop falls back to a still version.
 
