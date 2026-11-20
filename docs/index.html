@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Godrays: game streaming built on Kyber</title>
+<meta name="description" content="Godrays is a gamepad-friendly game-streaming launcher for Windows, built on Kyber. Host or join from one app, pair with a 6-digit code, measure real latency.">
+<link rel="icon" href="img/icon.png">
+<meta property="og:title" content="Godrays">
+<meta property="og:description" content="Game streaming built on Kyber. One app to host or join, a 6-digit code to pair, real latency measured.">
+<meta property="og:image" content="img/home.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800;900&family=JetBrains+Mono:wght@500;700&family=UnifrakturCook:wght@700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --void: #060409;
+    --panel: #100c18;
+    --panel-hi: #1c152a;
+    --line: #2e2444;
+    --text: #f6f3fc;
+    --dim: #968cb2;
+    --lavender: #b794ff;
+    --purple: #7b45f5;
+    --lime: #c8ff3d;
+    --ink: #0b0614;
+    --grotesk: "Archivo", "Arial", sans-serif;
+    --black: "Archivo", "Arial Black", sans-serif;
+    --gothic: "UnifrakturCook", "Old English Text MT", serif;
+    --mono: "JetBrains Mono", "Cascadia Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--void);
+    color: var(--text);
+    font-family: var(--grotesk);
+    font-size: 17px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  #rays {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -1;
+    background: radial-gradient(ellipse at 50% -10%, #2b125e 0%, var(--void) 60%);
+  }
+  a { color: inherit; }
+  .wrap { width: min(1120px, calc(100vw - 48px)); margin: 0 auto; }
+  .caps {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+  .caps.lime { color: var(--lime); }
+  em.g {
+    font-family: var(--gothic);
+    font-style: normal;
+    font-weight: 700;
+    color: var(--lime);
+    letter-spacing: 0;
+  }
+
+  /* ------------------------------------------------------------ nav */
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 22px 28px;
+  }
+  nav .links { display: flex; gap: 22px; }
+  nav .links a { text-decoration: none; }
+  nav .links a:hover { color: var(--text); }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+  .brand img { width: 28px; height: 28px; image-rendering: pixelated; }
+
+  /* ----------------------------------------------------------- hero */
+  .hero { text-align: center; padding: 11vh 0 40px; }
+  h1 {
+    font-family: var(--black);
+    font-weight: 900;
+    font-size: clamp(54px, 9vw, 116px);
+    line-height: 0.95;
+    letter-spacing: -0.035em;
+    margin: 18px 0 22px;
+  }
+  .lede { max-width: 640px; margin: 0 auto; color: #c9c0e0; font-size: 19px; }
+  .hero > .caps, .lede, h1 { text-shadow: 0 0 6px var(--void), 0 0 18px var(--void), 0 0 36px var(--void); }
+  .actions { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; margin: 38px 0 14px; }
+  .btn {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 270px;
+    padding: 16px 22px;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: transform 0.18s cubic-bezier(.3,1.6,.5,1), box-shadow 0.18s;
+  }
+  .btn b { font-family: var(--black); font-weight: 800; font-size: 18px; text-transform: uppercase; letter-spacing: 0.01em; }
+  .btn span { font-size: 14px; opacity: 0.72; }
+  .btn.primary { background: var(--lime); color: var(--ink); box-shadow: 0 0 0 var(--purple); }
+  .btn.primary:hover, .btn.primary:focus-visible { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--purple); }
+  .btn.plain { background: rgba(16, 12, 24, 0.9); color: var(--text); border: 1.5px solid var(--line); }
+  .btn.plain:hover, .btn.plain:focus-visible { transform: translate(-2px, -2px); border-color: var(--lavender); box-shadow: 6px 6px 0 var(--lavender); }
+  .btn::after {
+    content: "\25B6";
+    position: absolute;
+    right: 22px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    opacity: 0.45;
+  }
+
+  .shot {
+    display: block;
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    box-shadow: 0 40px 120px rgba(123, 69, 245, 0.25);
+    background: var(--void);
+  }
+  .hero .shot { margin-top: 60px; }
+
+  /* --------------------------------------------------------- numbers */
+  .numbers {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin: 90px 0 30px;
+  }
+  .fact {
+    background: rgba(16, 12, 24, 0.92);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 18px 20px;
+  }
+  .fact strong {
+    display: block;
+    font-family: var(--black);
+    font-weight: 900;
+    font-size: 40px;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin-top: 6px;
+  }
+  .fact p { margin: 4px 0 0; color: var(--dim); font-size: 14px; }
+  .note { color: var(--dim); font-size: 14px; }
+
+  /* -------------------------------------------------------- sections */
+  section { padding: 90px 0 20px; }
+  h2 {
+    font-family: var(--black);
+    font-weight: 900;
+    font-size: clamp(38px, 5vw, 60px);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    margin: 12px 0 18px;
+  }
+  .split { display: grid; grid-template-columns: 1fr 1.25fr; gap: 50px; align-items: center; }
+  .split.flip { grid-template-columns: 1.25fr 1fr; }
+  .split.flip > :first-child { order: 2; }
+  .split p { color: var(--dim); }
+  .split ul { padding-left: 0; list-style: none; }
+  .split li { padding: 10px 0 10px 28px; position: relative; border-top: 1px solid var(--line); }
+  .split li::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 19px;
+    width: 9px;
+    height: 9px;
+    background: var(--lime);
+  }
+  .split li b { color: var(--text); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 30px;
+  }
+  .card {
+    background: rgba(16, 12, 24, 0.92);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 24px;
+    transition: transform 0.2s cubic-bezier(.3,1.6,.5,1), background 0.2s, box-shadow 0.2s;
+  }
+  .card:hover { transform: translate(-3px, -3px); background: var(--lavender); color: var(--ink); box-shadow: 8px 8px 0 var(--lime); }
+  .card:hover p, .card:hover .caps { color: rgba(11, 6, 20, 0.7); }
+  .card h3 { font-family: var(--black); font-weight: 900; font-size: 26px; letter-spacing: -0.02em; margin: 12px 0 8px; text-transform: uppercase; }
+  .card p { margin: 0; color: var(--dim); font-size: 15.5px; }
+
+  .steps { counter-reset: step; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 30px; }
+  .step { border-top: 2px solid var(--lime); padding-top: 16px; }
+  .step::before { counter-increment: step; content: "0" counter(step); font-family: var(--mono); color: var(--lime); font-size: 13px; letter-spacing: 0.18em; }
+  .step h3 { font-size: 22px; margin: 8px 0 6px; }
+  .step p { color: var(--dim); margin: 0; font-size: 15.5px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--panel-hi); padding: 2px 6px; border-radius: 4px; }
+
+  .cta { text-align: center; padding: 120px 0 60px; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    margin-top: 60px;
+    padding: 28px 0 40px;
+    color: var(--dim);
+    font-size: 14px;
+    background: rgba(6, 4, 9, 0.85);
+  }
+  footer .wrap { display: flex; justify-content: space-between; gap: 30px; flex-wrap: wrap; }
+
+  @media (max-width: 860px) {
+    .numbers, .grid, .steps { grid-template-columns: 1fr 1fr; }
+    .split, .split.flip { grid-template-columns: 1fr; }
+    .split.flip > :first-child { order: 0; }
+    nav .links { display: none; }
+  }
+  @media (max-width: 520px) {
+    .numbers, .grid, .steps { grid-template-columns: 1fr; }
+    .btn { min-width: 100%; }
+  }
+</style>
+</head>
+<body>
+<canvas id="rays" aria-hidden="true"></canvas>
+
+<nav>
+  <a class="brand caps" href="#top"><img src="img/icon.png" alt="">Godrays</a>
+  <div class="links caps">
+    <a href="#host">Host</a>
+    <a href="#join">Join</a>
+    <a href="#latency">Latency</a>
+    <a href="https://github.com/JeanPaulDot/godrays">GitHub</a>
+  </div>
+</nav>
+
+<main id="top">
+  <div class="wrap hero">
+    <div class="caps lime">Game streaming &middot; built on Kyber</div>
+    <h1>Let there be <em class="g">light</em>.</h1>
+    <p class="lede">One app to share your PC or play on another. Pick <b>Host</b> or <b>Join</b>, pair once with a 6-digit code, and drive everything from the couch with a gamepad.</p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/JeanPaulDot/godrays/releases/latest"><b>Download for Windows</b><span>Free &middot; installs Kyber for you</span></a>
+      <a class="btn plain" href="https://github.com/JeanPaulDot/godrays"><b>Source on GitHub</b><span>Rust &middot; MIT licence</span></a>
+    </div>
+    <div class="caps">Windows 10 / 11 &middot; one 9 MB .exe &middot; no account</div>
+    <img class="shot" src="img/home.png" alt="Godrays home screen: Join and Host" width="1240" height="780">
+
+    <div class="numbers">
+      <div class="fact"><div class="caps">Pipeline</div><strong>7 ms</strong><p>capture to display, AMF + H.264, idle host</p></div>
+      <div class="fact"><div class="caps">On screen</div><strong>24 ms</strong><p>what you actually see, at 165 Hz</p></div>
+      <div class="fact"><div class="caps">Pairing</div><strong>6 digits</strong><p>once per device, then one press</p></div>
+      <div class="fact"><div class="caps">Under load</div><strong>&minus;20%</strong><p>encode time with games on the GPU</p></div>
+    </div>
+    <p class="note">Measured with Godrays' own latency lab on a Radeon RX 5700 XT, 1920 &times; 1080 at 165 Hz, streaming to the same PC.</p>
+  </div>
+
+  <section id="host">
+    <div class="wrap split">
+      <div>
+        <div class="caps lime">01 &middot; Host</div>
+        <h2>Share this <em class="g">PC</em>.</h2>
+        <p>Two panels, two jobs. Start hosting, and invite a device with a code. No addresses, user names or passwords to read out.</p>
+        <ul>
+          <li><b>Clean stop.</b> Players are disconnected and their virtual gamepads unplugged before the server exits.</li>
+          <li><b>Ahead of games.</b> Kyber's capture and encode get the highest GPU priority Windows allows.</li>
+          <li><b>Fastest encoder, measured.</b> Each encoder and codec your graphics card offers is tried on this PC; the fastest one that shows a picture wins.</li>
+        </ul>
+      </div>
+      <img class="shot" src="img/pairing.png" alt="The Host screen showing a 6-digit invite code" loading="lazy" width="1240" height="780">
+    </div>
+  </section>
+
+  <section id="join">
+    <div class="wrap split flip">
+      <div>
+        <div class="caps lime">02 &middot; Join</div>
+        <h2>Type the <em class="g">code</em>.</h2>
+        <p>PCs running Godrays appear on their own. Pick one, type the six digits it shows, and you are paired: the sign-in is handed over and the host's certificate pinned, so nothing can pretend to be it.</p>
+        <ul>
+          <li><b>Pad, keyboard or mouse.</b> A number pad for the d-pad, digits straight from the keyboard.</li>
+          <li><b>SPAKE2 pairing.</b> The code cannot be guessed from the network; three wrong tries burn it.</li>
+          <li><b>Leave any time.</b> Hold Start + Back + LB + RB, press Ctrl + Alt + Shift + Q, or click Leave.</li>
+        </ul>
+      </div>
+      <img class="shot" src="img/paircode.png" alt="Typing a pairing code with the on-screen number pad" loading="lazy" width="1240" height="780">
+    </div>
+  </section>
+
+  <section id="latency">
+    <div class="wrap">
+      <div class="caps lime">03 &middot; Measured, not promised</div>
+      <h2>Every <em class="g">millisecond</em>, counted.</h2>
+      <div class="grid">
+        <div class="card"><div class="caps">Pipeline</div><h3>Per stage</h3><p>Kyber's own timestamps for every frame: encode, network, decode and render, live over the stream.</p></div>
+        <div class="card"><div class="caps">On screen</div><h3>The beacon</h3><p>A barcode clock read twice in one screenshot gives the delay your eyes see, for Kyber or any other streaming app.</p></div>
+        <div class="card"><div class="caps">Compare</div><h3>Fair fights</h3><p>Measure Moonlight, Parsec or anything else on the same PC, the same way, side by side.</p></div>
+        <div class="card"><div class="caps">Picture</div><h3>Lowest latency</h3><p>H.264, no buffering, unreliable delivery when you want it: Kyber's QUIC transport never waits for a lost packet.</p></div>
+        <div class="card"><div class="caps">Controls</div><h3>Couch first</h3><p>Every screen works with a gamepad. Text fields bring an on-screen keyboard; settings switch with LB / RB.</p></div>
+        <div class="card"><div class="caps">Setup</div><h3>One click</h3><p>The official Kyber installer is downloaded, checked against a built-in checksum and installed for you.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap split">
+      <div>
+        <div class="caps lime">04 &middot; Settings</div>
+        <h2>Clear <em class="g">choices</em>.</h2>
+        <p>Six sections: Picture, Network, Controls, Hosting, Latency and App. Every setting says in one line what it does, and the full story sits under the list.</p>
+      </div>
+      <img class="shot" src="img/settings.png" alt="Settings with sections on the left" loading="lazy" width="1240" height="780">
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="caps lime">05 &middot; Get going</div>
+      <h2>Three <em class="g">steps</em>.</h2>
+      <div class="steps">
+        <div class="step"><h3>Run it on both PCs</h3><p>Download <code>godrays.exe</code>. On first start it offers to install Kyber (Windows asks for permission once).</p></div>
+        <div class="step"><h3>Host and invite</h3><p>On the PC with the games: Host, Start hosting, Show a code.</p></div>
+        <div class="step"><h3>Join and play</h3><p>On the other: Join, pick the host, type the code. Next time, one press.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="wrap cta">
+    <div class="caps">Free &middot; open source &middot; Windows</div>
+    <h2>Stream like it's <em class="g">local</em>.</h2>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/JeanPaulDot/godrays/releases/latest"><b>Download Godrays</b><span>Latest release on GitHub</span></a>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>Godrays is MIT-licensed. The streaming itself is <a href="https://gitlab.com/kyber/kyber">Kyber</a> (AGPL-3.0 or commercial), which Godrays downloads and runs as separate programs.</div>
+    <div>Not affiliated with the Kyber project.</div>
+  </div>
+</footer>
+
+<script>
+// The launcher's backdrop (src/fx.rs, "rays" mode) ported to WebGL2:
+// light shafts from above the page, sampled on a coarse grid and reduced to
+// four colours with an ordered Bayer dither, each cell drawn as a dot. The
+// light follows the pointer, as it follows the selection in the app.
+(() => {
+  const canvas = document.getElementById("rays");
+  const gl = canvas.getContext("webgl2", { antialias: false, alpha: false });
+  if (!gl) return; // the CSS gradient stays as a fallback
+
+  const vertex = `#version 300 es
+const vec2 corners[3] = vec2[3](vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0));
+void main() { gl_Position = vec4(corners[gl_VertexID], 0.0, 1.0); }`;
+
+  const fragment = `#version 300 es
+precision highp float;
+uniform vec4 u_rect;
+uniform float u_time;
+uniform float u_cell;
+uniform vec2 u_light;
+uniform float u_strength;
+uniform vec3 u_c0;
+uniform vec3 u_c1;
+uniform vec3 u_c2;
+uniform vec3 u_c3;
+out vec4 out_color;
+
+float bayer2(vec2 a) { a = floor(a); return fract(a.x / 2.0 + a.y * a.y * 0.75); }
+float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
+
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
+               mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+float dot_mask(vec2 frag, vec2 cell, float radius) {
+    vec2 local = frag / u_cell - cell - 0.5;
+    float edge = 1.5 / u_cell;
+    return 1.0 - smoothstep(radius - edge, radius + edge, length(local));
+}
+
+void main() {
+    vec2 frag = gl_FragCoord.xy - u_rect.xy;
+    vec2 cell = floor(frag / u_cell);
+    vec2 uv = (cell + 0.5) * u_cell / u_rect.zw;
+    uv.y = 1.0 - uv.y;
+    float aspect = u_rect.z / u_rect.w;
+
+    vec2 d = uv - u_light;
+    d.x *= aspect;
+    float dist = length(d);
+    float ang = atan(d.x, d.y);
+    float t = u_time;
+    float shafts = noise(vec2(ang * 6.0, t * 0.22)) * 0.65
+                 + noise(vec2(ang * 17.0 + 4.0, t * 0.37 + 9.0)) * 0.35;
+    shafts = pow(shafts, 2.4) * 2.2;
+    float fall = exp(-dist * 1.15);
+    float core = exp(-dist * 5.5);
+    float dust = noise(uv * vec2(aspect, 1.0) * 7.0 + vec2(t * 0.03, -t * 0.07));
+    dust = smoothstep(0.72, 1.0, dust) * 0.5 * fall;
+    float light = (shafts * fall * 0.85 + core * 1.1 + dust) * u_strength;
+    vec2 v = (uv - vec2(0.5, 0.45)) * vec2(aspect, 1.0);
+    light *= smoothstep(1.35, 0.25, length(v));
+
+    float level = floor(clamp(light * 3.4 + bayer4(cell) - 0.5, 0.0, 3.0));
+    vec3 dotc = level < 1.5 ? u_c1 : (level < 2.5 ? u_c2 : u_c3);
+    float radius = level < 0.5 ? 0.0 : 0.22 + 0.075 * level;
+    float m = dot_mask(frag, cell, radius);
+    vec3 base = u_c0 + u_c1 * 0.35 * clamp(core * 1.5 + shafts * fall * 0.35, 0.0, 1.0) * u_strength;
+    out_color = vec4(mix(base, dotc, m), 1.0);
+}`;
+
+  const compile = (type, source) => {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      console.warn(gl.getShaderInfoLog(shader));
+      return null;
+    }
+    return shader;
+  };
+  const vs = compile(gl.VERTEX_SHADER, vertex);
+  const fs = compile(gl.FRAGMENT_SHADER, fragment);
+  if (!vs || !fs) return;
+  const program = gl.createProgram();
+  gl.attachShader(program, vs);
+  gl.attachShader(program, fs);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return;
+  gl.useProgram(program);
+  gl.bindVertexArray(gl.createVertexArray());
+
+  const at = (name) => gl.getUniformLocation(program, name);
+  const u = {
+    rect: at("u_rect"), time: at("u_time"), cell: at("u_cell"),
+    light: at("u_light"), strength: at("u_strength"),
+  };
+  // VOID, PURPLE_DEEP, LAVENDER, LIME: the launcher's palette.
+  const palette = [[0x06, 0x04, 0x09], [0x2b, 0x12, 0x5e], [0xb7, 0x94, 0xff], [0xc8, 0xff, 0x3d]];
+  ["u_c0", "u_c1", "u_c2", "u_c3"].forEach((name, i) =>
+    gl.uniform3f(at(name), ...palette[i].map((c) => c / 255)));
+
+  const still = matchMedia("(prefers-reduced-motion: reduce)");
+  let pointerX = 0.5;
+  addEventListener("pointermove", (e) => { pointerX = e.clientX / innerWidth; }, { passive: true });
+
+  const resize = () => {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = Math.round(innerWidth * dpr);
+    canvas.height = Math.round(innerHeight * dpr);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.uniform1f(u.cell, Math.max(2, Math.round(6 * dpr)));
+    return dpr;
+  };
+  resize();
+  addEventListener("resize", resize);
+
+  const light = [0.5, -0.16];
+  let strength = 0.9;
+  let last = performance.now();
+  const start = last;
+  let visible = true;
+  document.addEventListener("visibilitychange", () => { visible = !document.hidden; if (visible) requestAnimationFrame(frame); });
+
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, 0.1);
+    last = now;
+    const target = 0.5 + (pointerX - 0.5) * 0.75;
+    const k = still.matches ? 1 : 1 - Math.exp(-dt * 2.5);
+    light[0] += (target - light[0]) * k;
+    // Full light at the top of the page, dimmer where there is text to read.
+    const wanted = 0.9 - 0.4 * Math.min(scrollY / innerHeight, 1);
+    strength += (wanted - strength) * (still.matches ? 1 : 1 - Math.exp(-dt * 4));
+    gl.uniform4f(u.rect, 0, 0, canvas.width, canvas.height);
+    gl.uniform1f(u.time, still.matches ? 0 : (now - start) / 1000);
+    gl.uniform2f(u.light, light[0], light[1]);
+    gl.uniform1f(u.strength, strength);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    if (visible) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
